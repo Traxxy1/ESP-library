@@ -64,7 +64,7 @@ function ESP:AddPlayer(player)
     local conn = player.AncestryChanged:Connect(function(_, parent)
         if not parent then
             if self.DrawingObjects[player] then
-                self.DrawingObjects[player]:Remove()
+                self.DrawingObjects[player]:Destroy()
                 self.DrawingObjects[player] = nil
                 self.Players[player] = nil
             end
@@ -159,8 +159,8 @@ runService.RenderStepped:Connect(function()
                     minX, minY = minX - padding, minY - padding
                     maxX, maxY = maxX + padding, maxY + padding
 
-                    drawing.box.Size = Vector2.new(maxX - minX, maxY - minY)
-                    drawing.box.Position = Vector2.new(minX, minY)
+                    drawing.Box.Size = Vector2.new(maxX - minX, maxY - minY)
+                    drawing.Box.Position = Vector2.new(minX, minY)
                     drawing.NameTag.Text = target.Name
                     drawing.NameTag.Position = Vector2.new((minX + maxX) / 2, minY - 20)
                 else
