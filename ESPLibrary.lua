@@ -188,6 +188,7 @@ function ESP:AddPlayer(player, color)
 
     self.Connections[player] = self.Connections[player] or {}
 
+    -- Handle player leaving
     local playerAncestryChangedConnection = player.AncestryChanged:Connect(function(_, parent)
         if not parent then
             cleanupDrawings(player)
@@ -196,6 +197,28 @@ function ESP:AddPlayer(player, color)
         end
     end)
     tableInsert(self.Connections[player], playerAncestryChangedConnection)
+    
+    -- Handle player respawns
+    local characterAddedConnection = player.CharacterAdded:Connect(function(character)
+        -- Make character streaming persistent if possible
+        if character and character.ModelStreamingMode ~= Enum.ModelStreamingMode.Persistent then
+            character.ModelStreamingMode = Enum.ModelStreamingMode.Persistent
+        end
+    end)
+    
+    local characterRemovedConnection = player.CharacterRemoving:Connect(function()
+        -- Hide ESP temporarily when character is removed
+        local drawing = self.DrawingObjects[player]
+        if drawing then
+            drawing.Box.Visible = false
+            drawing.NameTag.Visible = false
+            drawing.Distance.Visible = false
+            drawing.HeadDot.Visible = false
+        end
+    end)
+    
+    tableInsert(self.Connections[player], characterAddedConnection)
+    tableInsert(self.Connections[player], characterRemovedConnection)
 end
 
 function ESP:RemovePlayer(player)
