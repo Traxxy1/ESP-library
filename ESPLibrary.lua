@@ -417,12 +417,42 @@ function ESP:ClearInstances()
 end
 
 function ESP:Clear()
-    self:ClearPlayers()
-    self:ClearInstances()
+    -- Clear players
+    for player, _ in pairs(self.Players) do
+        cleanupDrawings(player)
+        cleanupConnections(player)
+    end
+    tableClear(self.Players)
+    
+    -- Clear instances
+    for instance, _ in pairs(self.Instances) do
+        cleanupDrawings(instance)
+        cleanupConnections(instance)
+    end
+    tableClear(self.Instances)
+    
+    -- Clear global connections
+    for key, connection in pairs(self.Connections) do
+        if typeof(key) ~= "Instance" then  -- Skip player/instance connections (already handled above)
+            if typeof(connection) == "table" then
+                for _, conn in pairs(connection) do
+                    conn:Disconnect()
+                end
+            else
+                connection:Disconnect()
+            end
+        end
+    end
+    
+    -- Clear team tracking if it exists
+    if self.TeamTracking then
+        tableClear(self.TeamTracking)
+    end
+    
+    -- Clear remaining tables
     tableClear(self.Connections)
     tableClear(self.DrawingObjects)
 end
-
 -- Character persistence function
 local function makeCharacterPersistent(character)
     if character and character.ModelStreamingMode ~= Enum.ModelStreamingMode.Persistent then
