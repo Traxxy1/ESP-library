@@ -3,7 +3,8 @@ local ESP = {
     Players = {},
     Instances = {},
     DrawingObjects = {},
-    Connections = {}
+    Connections = {},
+    TrackCivilians = true
 }
 
 -- Settings
@@ -230,91 +231,106 @@ function ESP:RemovePlayer(player)
     end
 end
 
-function ESP:AddTeam(team, color, useTeamColor)
+function ESP:AddTeam(teamName, color, useTeamColor)
     if not ESP.Settings.MasterToggle then return end
-    if not team then return end
+    if not teamName then return end
 
+    color = color or Color3.new(1,1,1)
     local teamObject
-    if team ~= "Criminal" then
-        local teamFound = false
-        for _, currentTeam in pairs(teams:GetChildren()) do
-            if team == currentTeam.Name then
-                teamFound = true
-                teamObject = currentTeam
+
+    -- Try to find the team object, except for Criminal (special case)
+    if teamName ~= "Criminal" then
+        for _, t in pairs(game:GetService("Teams"):GetChildren()) do
+            if t.Name == teamName then
+                teamObject = t
                 break
             end
         end
-        if not teamFound then return end
+        if not teamObject then
+            warn("[ESP] AddTeam failed: Team not found:", teamName)
+            return
+        end
+        if useTeamColor then
+            color = teamObject.TeamColor.Color
+        end
     end
 
-    if useTeamColor and teamObject then
-        color = teamObject.TeamColor.Color
-    else
-        color = color or Color3.new(1,1,1)
-    end
-
-    -- ERLC check
-    if team == "Criminal" and game.PlaceId == 2534724415 then
-        for _, player in ipairs(players:GetPlayers()) do
-            if player and player ~= localPlayer and player:FindFirstChild("Is_Wanted") then
-                self:AddPlayer(player, Color3.new(1,0,0))
+    -- Track special cases
+    if teamName == "Criminal" then
+        -- Setup Criminal ESP
+        for _, player in ipairs(game.Players:GetPlayers()) do
+            if player ~= localPlayer and player:FindFirstChild("Is_Wanted") then
+                self:AddPlayer(player, Color3.new(1,0,0)) -- Red color for criminals
             end
 
-            self.Connections[player] = self.Connections[player] or {}
+            if not self.Connections[player] then
+                self.Connections[player] = {}
+            end
 
-            local wantedChildAddedConnection = player.ChildAdded:Connect(function(child)
+            -- Handle Criminal detection
+            local childAddedConn = player.ChildAdded:Connect(function(child)
                 if child.Name == "Is_Wanted" then
-                    if self.Players[player] then
-                        self:RemovePlayer(player)
-                    end
                     self:AddPlayer(player, Color3.new(1,0,0))
                 end
             end)
 
-            local wantedChildRemovedConnection = player.ChildRemoved:Connect(function(child)
+            local childRemovedConn = player.ChildRemoved:Connect(function(child)
                 if child.Name == "Is_Wanted" then
-                    if self.Players[player] then
-                        self:RemovePlayer(player)
-                    end
-                    self:AddPlayer(player, color)
+                    self:RemovePlayer(player)
                 end
             end)
 
-            tableInsert(self.Connections[player], wantedChildAddedConnection)
-            tableInsert(self.Connections[player], wantedChildRemovedConnection)
+            table.insert(self.Connections[player], childAddedConn)
+            table.insert(self.Connections[player], childRemovedConn)
         end
-    else
-        -- Create a team tracking connection to monitor all players
-        local teamTrackingConnection = runService.Heartbeat:Connect(function()
-            for _, player in ipairs(players:GetPlayers()) do
-                if player and player ~= localPlayer then
-                    local isOnTeam = player.Team and player.Team.Name == team
-                    local isTracked = self.Players[player]
-                    
-                    -- If player is on team but not tracked, add them
-                    if isOnTeam and not isTracked then
-                        self:AddPlayer(player, color)
-                    end
-                    
-                    -- If player is tracked but not on team, remove them
-                    if not isOnTeam and isTracked then
-                        self:RemovePlayer(player)
-                    end
-                end
-            end
-        end)
-        
-        -- Store this connection so it can be cleaned up later
-        self.Connections["TeamTracker_" .. team] = teamTrackingConnection
-        
-        -- Initial setup for all current players
-        for _, player in ipairs(players:GetPlayers()) do
-            if player and player ~= localPlayer and player.Team and player.Team.Name == team then
+
+    elseif teamName == "Civilian" then
+        -- Setup Civilian ESP
+        for _, player in ipairs(game.Players:GetPlayers()) do
+            if player ~= localPlayer and player.Team and player.Team.Name == "Civilian" and not player:FindFirstChild("Is_Wanted") then
                 self:AddPlayer(player, color)
             end
+
+            if not self.Connections[player] then
+                self.Connections[player] = {}
+            end
+
+            -- Handle Civilian team changes
+            local teamChangedConn = player:GetPropertyChangedSignal("Team"):Connect(function()
+                if player.Team and player.Team.Name == "Civilian" and not player:FindFirstChild("Is_Wanted") then
+                    self:AddPlayer(player, color)
+                else
+                    self:RemovePlayer(player)
+                end
+            end)
+
+            table.insert(self.Connections[player], teamChangedConn)
+        end
+
+    else
+        -- Setup Generic Team ESP
+        for _, player in ipairs(game.Players:GetPlayers()) do
+            if player ~= localPlayer and player.Team and player.Team.Name == teamName then
+                self:AddPlayer(player, color)
+            end
+
+            if not self.Connections[player] then
+                self.Connections[player] = {}
+            end
+
+            local teamChangedConn = player:GetPropertyChangedSignal("Team"):Connect(function()
+                if player.Team and player.Team.Name == teamName then
+                    self:AddPlayer(player, color)
+                else
+                    self:RemovePlayer(player)
+                end
+            end)
+
+            table.insert(self.Connections[player], teamChangedConn)
         end
     end
 end
+
 
 function ESP:RemoveTeam(team)
     if not team then return end
@@ -328,6 +344,14 @@ function ESP:RemoveTeam(team)
     if team == "Criminal" then
         for _, player in pairs(players:GetPlayers()) do
             if player and player ~= localPlayer and player:FindFirstChild("Is_Wanted") then
+                if ESP.Players[player] then
+                    ESP:RemovePlayer(player)
+                end
+            end
+        end
+    elseif team == "Civilian" then
+        for _, player in pairs(players:GetPlayers()) do
+            if player and player ~= localPlayer and player.Team and player.Team.Name == team and not player:FindFirstChild("Is_Wanted") then
                 if ESP.Players[player] then
                     ESP:RemovePlayer(player)
                 end
