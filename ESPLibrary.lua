@@ -173,6 +173,7 @@ function ESP:AddPlayer(player, color)
     if not ESP.Settings.MasterToggle then return end
     if not player then return end
     if self.Players[player] then return end
+    if player == localPlayer then return end
 
     color = color or Color3.new(1,1,1)
 
@@ -283,29 +284,46 @@ function ESP:AddTeam(team, color, useTeamColor)
             tableInsert(self.Connections[player], wantedChildRemovedConnection)
         end
     else
+        -- Create a team tracking connection to monitor all players
+        local teamTrackingConnection = runService.Heartbeat:Connect(function()
+            for _, player in ipairs(players:GetPlayers()) do
+                if player and player ~= localPlayer then
+                    local isOnTeam = player.Team and player.Team.Name == team
+                    local isTracked = self.Players[player]
+                    
+                    -- If player is on team but not tracked, add them
+                    if isOnTeam and not isTracked then
+                        self:AddPlayer(player, color)
+                    end
+                    
+                    -- If player is tracked but not on team, remove them
+                    if not isOnTeam and isTracked then
+                        self:RemovePlayer(player)
+                    end
+                end
+            end
+        end)
+        
+        -- Store this connection so it can be cleaned up later
+        self.Connections["TeamTracker_" .. team] = teamTrackingConnection
+        
+        -- Initial setup for all current players
         for _, player in ipairs(players:GetPlayers()) do
             if player and player ~= localPlayer and player.Team and player.Team.Name == team then
                 self:AddPlayer(player, color)
             end
-
-            self.Connections[player] = self.Connections[player] or {}
-
-            local playerTeamChangeConnection = player:GetPropertyChangedSignal("Team"):Connect(function()
-                task.wait(2)
-                if player.Team and player.Team.Name == team then
-                    self:AddPlayer(player, color)
-                else
-                    self:RemovePlayer(player)
-                end
-            end)
-
-            tableInsert(self.Connections[player], playerTeamChangeConnection)
         end
     end
 end
 
 function ESP:RemoveTeam(team)
     if not team then return end
+
+    -- Clean up the team tracking connection
+    if self.Connections["TeamTracker_" .. team] then
+        self.Connections["TeamTracker_" .. team]:Disconnect()
+        self.Connections["TeamTracker_" .. team] = nil
+    end
 
     if team == "Criminal" then
         for _, player in pairs(players:GetPlayers()) do
