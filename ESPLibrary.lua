@@ -319,6 +319,7 @@ function ESP:AddTeam(teamName, color, useTeamColor)
             end
 
             local teamChangedConn = player:GetPropertyChangedSignal("Team"):Connect(function()
+                task.wait(2)
                 if player.Team and player.Team.Name == teamName then
                     self:AddPlayer(player, color)
                 else
