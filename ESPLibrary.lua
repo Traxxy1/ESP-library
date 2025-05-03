@@ -297,6 +297,7 @@ function ESP:AddTeam(teamName, color, useTeamColor)
 
             -- Handle Civilian team changes
             local teamChangedConn = player:GetPropertyChangedSignal("Team"):Connect(function()
+                task.wait(2)
                 if player.Team and player.Team.Name == "Civilian" and not player:FindFirstChild("Is_Wanted") then
                     self:AddPlayer(player, color)
                 else
